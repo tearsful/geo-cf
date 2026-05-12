@@ -1,0 +1,143 @@
+name: Scheduled Geo Data Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      expiration:
+        description: 'geo.zip expiration after upload'
+        required: true
+        default: 'never'
+        type: choice
+        options:
+          - never
+          - 300
+          - 30m
+          - 2h
+          - 7d
+          - default
+  schedule:
+    # 每天 11:05 AM UTC 运行
+    - cron: '0 2 * * *'
+
+jobs:
+  update-geo-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Download geoip and geosite
+        run: |
+          wget -O /tmp/geoip.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
+          wget -O /tmp/geosite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
+
+      - name: Download MikroTik CN IP lists
+        run: |
+          set -euo pipefail
+          download_with_retry() {
+            local url="$1"
+            local output="$2"
+            for attempt in 1 2 3; do
+              if wget -O "$output" "$url"; then
+                return 0
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "Retrying download ($attempt/3)..."
+                sleep 2
+              fi
+            done
+            return 1
+          }
+          mkdir -p /tmp/mikrotik
+          download_with_retry "https://www.ipdeny.com/ipblocks/data/countries/cn.zone" "/tmp/mikrotik/all_cn.txt" &
+          pid_v4=$!
+          download_with_retry "https://www.ipdeny.com/ipv6/ipaddresses/blocks/cn.zone" "/tmp/mikrotik/all_cn_ipv6.txt" &
+          pid_v6=$!
+          wait "$pid_v4" || exit 1
+          wait "$pid_v6" || exit 1
+
+      - name: Download additional rule lists
+        run: |
+          set -euo pipefail
+          wget -O /tmp/neodevhost_domain.txt https://raw.githubusercontent.com/neodevpro/neodevhost/master/domain
+          wget -O /tmp/mosdns_adrules.txt https://raw.githubusercontent.com/Cats-Team/AdRules/main/mosdns_adrules.txt
+          wget -O /tmp/AWAvenue-Ads-Rule-Mosdns_v5.txt https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-Mosdns_v5.txt
+
+      - name: Package geo release archive
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/geo-release
+          cp /tmp/geoip.dat /tmp/geo-release/
+          cp /tmp/geosite.dat /tmp/geo-release/
+          cp /tmp/neodevhost_domain.txt /tmp/geo-release/domain.txt
+          cp /tmp/mosdns_adrules.txt /tmp/geo-release/
+          cp /tmp/AWAvenue-Ads-Rule-Mosdns_v5.txt /tmp/geo-release/
+          cp /tmp/mikrotik/all_cn.txt /tmp/geo-release/
+          cp /tmp/mikrotik/all_cn_ipv6.txt /tmp/geo-release/
+          cd /tmp/geo-release
+          zip -r /tmp/geo.zip .
+
+      - name: Upload geo.zip to Cloudflare server
+        env:
+          CLOUDFLARE_SITE_USER: ${{ secrets.CLOUDFLARE_SITE_USER }}
+          CLOUDFLARE_SITE_PASS: ${{ secrets.CLOUDFLARE_SITE_PASS }}
+          CLOUDFLARE_MANAGE_URL: ${{ secrets.CLOUDFLARE_MANAGE_URL }}
+          CLOUDFLARE_MANAGE_PASS: ${{ secrets.CLOUDFLARE_MANAGE_PASS }}
+          CI_UPLOAD_TOKEN: ${{ secrets.CI_UPLOAD_TOKEN }}
+          GEO_ZIP_EXPIRATION: ${{ github.event_name == 'workflow_dispatch' && inputs.expiration || 'never' }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_SITE_USER"
+          test -n "$CLOUDFLARE_SITE_PASS"
+          test -n "$CLOUDFLARE_MANAGE_URL"
+          test -n "$CLOUDFLARE_MANAGE_PASS"
+          test -n "$CI_UPLOAD_TOKEN"
+          SITE_USER="$(printf '%s' "$CLOUDFLARE_SITE_USER" | tr -d '\r\n')"
+          SITE_PASS="$(printf '%s' "$CLOUDFLARE_SITE_PASS" | tr -d '\r\n')"
+          MANAGE_URL="$(printf '%s' "$CLOUDFLARE_MANAGE_URL" | tr -d '\r\n')"
+          MANAGE_PASS="$(printf '%s' "$CLOUDFLARE_MANAGE_PASS" | tr -d '\r\n')"
+          UPLOAD_TOKEN="$(printf '%s' "$CI_UPLOAD_TOKEN" | tr -d '\r\n')"
+          EXPIRATION="$(printf '%s' "$GEO_ZIP_EXPIRATION" | tr -d '\r\n')"
+          curl_form_args=(-F "c=@/tmp/geo.zip")
+          if [ "$EXPIRATION" != "default" ]; then
+            curl_form_args+=(-F "e=${EXPIRATION}")
+          fi
+          HTTP_STATUS="$(command curl --show-error -# \
+            --output /tmp/cloudflare-upload-response.txt \
+            --write-out "%{http_code}" \
+            --url "${MANAGE_URL}:${MANAGE_PASS}" \
+            -H "X-CI-Upload-Token: ${UPLOAD_TOKEN}" \
+            -u "${SITE_USER}:${SITE_PASS}" \
+            -X PUT \
+            "${curl_form_args[@]}")"
+          printf '\nHTTP_STATUS=%s\n' "$HTTP_STATUS"
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            sed -n '1,80p' /tmp/cloudflare-upload-response.txt
+            exit 1
+          fi
+
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'%y%m%d%H%M%S')"
+  
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.event_name }}-${{ steps.date.outputs.date }}
+          release_name: ${{ steps.date.outputs.date }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Geo Zip Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: /tmp/geo.zip
+          asset_name: geo.zip
+          asset_content_type: application/zip
