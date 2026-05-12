@@ -16,8 +16,8 @@ on:
           - 7d
           - default
   schedule:
-    # 每天 11:05 AM UTC 运行
-    - cron: '0 2 * * *'
+    # 北京时间 08:00 AM 运行 (即 UTC 00:00)
+    - cron: '0 0 * * *'
 
 jobs:
   update-geo-data:
