@@ -66,6 +66,34 @@ jobs:
           wget -O /tmp/neodevhost_domain.txt https://raw.githubusercontent.com/neodevpro/neodevhost/master/domain
           wget -O /tmp/mosdns_adrules.txt https://raw.githubusercontent.com/Cats-Team/AdRules/main/mosdns_adrules.txt
           wget -O /tmp/AWAvenue-Ads-Rule-Mosdns_v5.txt https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-Mosdns_v5.txt
+          
+      - name: Download Cloudflare IP lists
+        run: |
+          set -euo pipefail
+          download_with_retry() {
+            local url="$1"
+            local output="$2"
+            for attempt in 1 2 3; do
+              if wget -O "$output" "$url"; then
+                return 0
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "Retrying download ($attempt/3)..."
+                sleep 2
+              fi
+            done
+            return 1
+          }
+          download_with_retry "https://api.cloudflare.com/client/v4/ips" "/tmp/cloudflare_ips.json"
+          jq -r '
+            if .success != true then
+              error("Cloudflare API returned an error response")
+            else
+              (.result.ipv4_cidrs[]?, .result.ipv6_cidrs[]?)
+            end
+          ' /tmp/cloudflare_ips.json > /tmp/cloudflare-cidr.txt
+          test -s /tmp/cloudflare-cidr.txt
+
 
       - name: Package geo release archive
         run: |
@@ -78,6 +106,7 @@ jobs:
           cp /tmp/AWAvenue-Ads-Rule-Mosdns_v5.txt /tmp/geo-release/
           cp /tmp/mikrotik/all_cn.txt /tmp/geo-release/
           cp /tmp/mikrotik/all_cn_ipv6.txt /tmp/geo-release/
+          cp /tmp/cloudflare-cidr.txt /tmp/geo-release/
           cd /tmp/geo-release
           zip -r /tmp/geo.zip .
 
