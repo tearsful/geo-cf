@@ -13,6 +13,7 @@
 - `AWAvenue-Ads-Rule-Mosdns_v5.txt`
 - `all_cn.txt`
 - `all_cn_ipv6.txt`
+- `cloudflare-cidr.txt`，来自 Cloudflare IPs API
 
 打包产物为 `geo.zip`，会作为 Release 资产上传。
 
