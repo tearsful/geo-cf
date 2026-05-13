@@ -16,8 +16,8 @@ on:
           - 7d
           - default
   schedule:
-    # 北京时间 08:00 AM 运行 (即 UTC 00:00)
-    - cron: '0 0 * * *'
+    # 北京时间 08:15 AM 运行 (即 UTC 00:00)
+    - cron: '15 0 * * *'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
