@@ -25,10 +25,10 @@ GitHub Release 还会单独附带 `cn_ip_cidr.rsc`（MikroTik 导入脚本，不
 
 脚本路径：仓库根目录 `generate-cn-ip-cidr-rsc.sh`
 
-生成文件：
+生成文件（每次执行都会**覆盖**已有的 `cn_ip_cidr.rsc`）：
 
-- `all_cn.txt` / `all_cn_ipv6.txt`：ipdeny 原始 CN CIDR 列表
-- `cn_ip_cidr.rsc`：RouterOS 可导入的合并脚本
+- 下载过程在临时目录完成，校验通过后再写入目标路径
+- 成功后**不会保留** `all_cn.txt` / `all_cn_ipv6.txt`，输出目录里通常只剩 `cn_ip_cidr.rsc`
 
 ### 依赖
 
@@ -60,7 +60,7 @@ cd /opt/geo-cf && git pull
 ```bash
 cd /opt/geo-cf
 ./generate-cn-ip-cidr-rsc.sh
-ls -la output/mikrotik/
+ls -la output/mikrotik/cn_ip_cidr.rsc
 ```
 
 指定输出目录（推荐固定路径，便于 cron 与后续拷贝到 RouterOS）：
