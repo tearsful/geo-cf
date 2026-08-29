@@ -60,6 +60,29 @@ jobs:
           wait "$pid_v4" || exit 1
           wait "$pid_v6" || exit 1
 
+          rsc="/tmp/cn_ip_cidr.rsc"
+          {
+            printf '%s\n' '/log info "Import cn ipv4 cidr list..."'
+            printf '%s\n' '/ip firewall address-list remove [/ip firewall address-list find comment=cn_ip_cidr]'
+            printf '%s\n' '/ip firewall address-list'
+            while IFS= read -r line || [ -n "$line" ]; do
+              line="${line//$'\r'/}"
+              [ -z "$line" ] && continue
+              printf ':do {add comment=cn_ip_cidr address=%s list=cn_ip_cidr} on-error={}\n' "$line"
+            done < "/tmp/mikrotik/all_cn.txt"
+            printf '%s\n' ':if ([:len [/ipv6 dhcp-cl  find where status=bound]] > 0) do={'
+            printf '%s\n' '/log info "Import cn ipv6 cidr list..."'
+            printf '%s\n' '/ipv6 firewall address-list remove [/ipv6 firewall address-list find comment=cn_ipv6]'
+            printf '%s\n' '/ipv6 firewall address-list'
+            while IFS= read -r line || [ -n "$line" ]; do
+              line="${line//$'\r'/}"
+              [ -z "$line" ] && continue
+              printf ':do {add comment=cn_ipv6 address=%s list=cn_ip_cidr} on-error={}\n' "$line"
+            done < "/tmp/mikrotik/all_cn_ipv6.txt"
+            printf '%s\n' '}'
+          } > "$rsc"
+          test -s "$rsc"
+
       - name: Download additional rule lists
         run: |
           set -euo pipefail
@@ -160,6 +183,8 @@ jobs:
           name: ${{ steps.date.outputs.date }}
           draft: false
           prerelease: false
-          files: /tmp/geo.zip
+          files: |
+            /tmp/geo.zip
+            /tmp/cn_ip_cidr.rsc
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
