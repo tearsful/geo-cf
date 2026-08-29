@@ -28,7 +28,7 @@ GitHub Release 还会单独附带 `cn_ip_cidr.rsc`（MikroTik 导入脚本，不
 生成文件（每次执行都会**覆盖**已有的 `cn_ip_cidr.rsc`）：
 
 - 下载过程在临时目录完成，校验通过后再写入目标路径
-- 成功后**不会保留** `all_cn.txt` / `all_cn_ipv6.txt`，输出目录里通常只剩 `cn_ip_cidr.rsc`
+- 成功后**不会保留** `all_cn.txt` / `all_cn_ipv6.txt`；脚本会在开始与结束时删除 `OUTPUT_DIR` 内这两类中间文件（含旧版脚本遗留）
 
 ### 依赖
 

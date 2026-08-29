@@ -101,6 +101,9 @@ write_rsc_from_zones() {
 mkdir -p "$OUT_DIR"
 mkdir -p "$(dirname "$RSC_PATH")"
 
+# Remove stale intermediates from older script versions or manual copies.
+rm -f "$OUT_DIR/all_cn.txt" "$OUT_DIR/all_cn_ipv6.txt"
+
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/cn-ip-cidr.XXXXXX")"
 cleanup() {
   rm -rf "$tmp_dir"
@@ -130,5 +133,7 @@ test -s "$rsc_tmp"
 
 mv -f "$rsc_tmp" "$RSC_PATH"
 
-# Intermediate lists live only in tmp_dir; trap removes them on exit.
+rm -f "$OUT_DIR/all_cn.txt" "$OUT_DIR/all_cn_ipv6.txt"
+
+# Download lists live only in tmp_dir; trap removes them on exit.
 echo "Updated: $RSC_PATH ($(wc -c < "$RSC_PATH" | tr -d ' ') bytes)"
