@@ -15,7 +15,100 @@
 - `all_cn_ipv6.txt`
 - `cloudflare-cidr.txt`，来自 Cloudflare IPs API
 
+GitHub Release 还会单独附带 `cn_ip_cidr.rsc`（MikroTik 导入脚本，不包含在 `geo.zip` 内）。
+
 打包产物为 `geo.zip`，会作为 Release 资产上传。
+
+## PVE 本地生成 `cn_ip_cidr.rsc`
+
+在 Proxmox VE 宿主机或 LXC/虚拟机中，可用仓库脚本本地生成与 GitHub Actions 相同逻辑的 MikroTik 脚本，无需跑完整工作流。
+
+脚本路径：仓库根目录 `generate-cn-ip-cidr-rsc.sh`
+
+生成文件：
+
+- `all_cn.txt` / `all_cn_ipv6.txt`：ipdeny 原始 CN CIDR 列表
+- `cn_ip_cidr.rsc`：RouterOS 可导入的合并脚本
+
+### 依赖
+
+PVE 基于 Debian，一般已带 `wget`；若没有：
+
+```bash
+apt update
+apt install -y wget curl git
+```
+
+### 获取代码
+
+```bash
+git clone https://github.com/tearsful/geo-cf.git /opt/geo-cf
+cd /opt/geo-cf
+chmod +x generate-cn-ip-cidr-rsc.sh
+```
+
+仅更新脚本时：
+
+```bash
+cd /opt/geo-cf && git pull
+```
+
+### 手动执行
+
+默认输出到当前目录下的 `./output/mikrotik/`：
+
+```bash
+cd /opt/geo-cf
+./generate-cn-ip-cidr-rsc.sh
+ls -la output/mikrotik/
+```
+
+指定输出目录（推荐固定路径，便于 cron 与后续拷贝到 RouterOS）：
+
+```bash
+OUT_DIR=/var/lib/mikrotik-cn ./generate-cn-ip-cidr-rsc.sh
+# 或
+./generate-cn-ip-cidr-rsc.sh /var/lib/mikrotik-cn
+```
+
+自定义 `.rsc` 路径：
+
+```bash
+OUT_DIR=/var/lib/mikrotik-cn \
+RSC_PATH=/var/lib/mikrotik-cn/cn_ip_cidr.rsc \
+./generate-cn-ip-cidr-rsc.sh
+```
+
+成功结束时脚本会打印三个文件路径及 `cn_ip_cidr.rsc` 字节大小。
+
+### 定时任务（cron）
+
+编辑 root 或运行用户的 crontab，例如每天 08:20（时区以 PVE 系统为准）：
+
+```bash
+crontab -e
+```
+
+```cron
+20 8 * * * /opt/geo-cf/generate-cn-ip-cidr-rsc.sh /var/lib/mikrotik-cn >> /var/log/cn-ip-cidr.log 2>&1
+```
+
+首次建议手动跑一遍并查看日志：
+
+```bash
+/var/lib/mikrotik-cn/cn_ip_cidr.rsc
+tail -20 /var/log/cn-ip-cidr.log
+```
+
+### 在 MikroTik 上使用
+
+将 `cn_ip_cidr.rsc` 上传到 RouterOS（Winbox / SFTP / `/tool fetch` 等），在终端执行：
+
+```text
+/import file-name=cn_ip_cidr.rsc
+```
+
+IPv6 段脚本内已用 `:if ([:len [/ipv6 dhcp-cl find where status=bound]] > 0)` 包裹，无 IPv6 DHCP 客户端的节点不会写入 IPv6 列表。
 
 ## Cloudflare 同步
 
@@ -101,6 +194,6 @@ command curl -v -# \
   -F "e=never"
 ```
 
-### 更新说明
+## 更新说明
 
-工作流每天定时运行，也支持手动触发。每次运行会生成新的 Release，并上传最新的 `geo.zip`。
+工作流每天定时运行，也支持手动触发。每次运行会生成新的 Release，并上传最新的 `geo.zip` 与 `cn_ip_cidr.rsc`。
