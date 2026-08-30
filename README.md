@@ -21,15 +21,29 @@ GitHub Release 还会单独附带 `cn_ip_cidr.rsc`（MikroTik 导入脚本，不
 
 另会将 `mikrotik_cn_ipv4.txt`、`mikrotik_cn_ipv6.txt` 同步到公共仓库 [tearsful/geo](https://github.com/tearsful/geo) 的 **`latest` Release**（不存在则创建；每次覆盖同名资产；并删除该仓库内除 `latest` 外的其它 Release，只保留一份）。
 
-在 **geo-cf** 仓库的 Actions 配置中：
+### 公共仓库 `latest` Release 同步配置
 
-**Secrets**
+工作流用 PAT 调用 `gh` 写入 **另一个仓库**（由变量 `TEARSFUL_GEO_REPO` 指定）。`GITHUB_TOKEN` 只能操作当前 `geo-cf` 仓库，不能代替此 PAT。
 
-- `TEARSFUL_GEO_RELEASE_TOKEN`：对目标公共仓库具备 `contents` 写权限的 PAT（经典 token 选 `repo`，或 fine-grained 授权该仓库）。
+**1. 在 GitHub 账号里创建 Token（不是在仓库里“生成”）**
 
-**Variables**
+- 打开：**GitHub 右上角头像 → Settings → Developer settings → Personal access tokens**
+- **Fine-grained（推荐）**：新建 token，Repository access 选 **Only select repositories** 并勾选 `tearsful/geo`（或你在 `TEARSFUL_GEO_REPO` 里填的仓库）；Permissions → **Contents** 设为 **Read and write**。
+- **Classic**：勾选 `repo`（或至少能向目标仓库发 Release 的权限）。
 
-- `TEARSFUL_GEO_REPO`：目标仓库，格式 `owner/repo`（例如 `tearsful/geo`）。
+创建完成后**只显示一次**的 token 字符串先复制保存。
+
+**2. 把 Token 填进 geo-cf 仓库的 Secret（只是存放，不是在这里创建）**
+
+- 打开 **geo-cf** 仓库：**Settings → Secrets and variables → Actions → Secrets → New repository secret**
+- Name：`TEARSFUL_GEO_RELEASE_TOKEN`
+- Secret：粘贴上一步复制的 PAT
+
+**3. 配置 Variable（仓库级，非 Secret）**
+
+- 同一页面 **Variables** → New repository variable
+- Name：`TEARSFUL_GEO_REPO`
+- Value：`tearsful/geo`（`owner/repo` 格式）
 
 ## PVE 本地生成 `cn_ip_cidr.rsc`
 
