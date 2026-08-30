@@ -138,7 +138,7 @@ jobs:
           if [ "$http_code" = "404" ]; then
             http_code="$(api -o /tmp/geo_pub_release.json -w '%{http_code}' -X POST \
               "https://api.github.com/repos/${owner}/${name}/releases" \
-              -d '{"tag_name":"latest","name":"latest","body":"MikroTik CN IPv4/IPv6 CIDR lists (auto-updated).","make_latest":true}')"
+              -d '{"tag_name":"latest","name":"latest","body":"MikroTik CN IPv4/IPv6 CIDR lists (auto-updated).","make_latest":"true"}')"
             echo "POST create release HTTP ${http_code}"
             if [ "$http_code" != "201" ]; then
               cat /tmp/geo_pub_release.json >&2 || true
@@ -171,7 +171,7 @@ jobs:
 
           api -o /tmp/geo_pub_latest.json -X PATCH \
             "https://api.github.com/repos/${owner}/${name}/releases/${release_id}" \
-            -d '{"make_latest":true}' >/dev/null
+            -d '{"make_latest":"true"}' >/dev/null
 
           api -o /tmp/geo_pub_release_list.json \
             "https://api.github.com/repos/${owner}/${name}/releases?per_page=100" >/dev/null
