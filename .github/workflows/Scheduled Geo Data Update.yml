@@ -60,6 +60,9 @@ jobs:
           wait "$pid_v4" || exit 1
           wait "$pid_v6" || exit 1
 
+          cp /tmp/mikrotik/all_cn.txt /tmp/mikrotik_cn_ipv4.txt
+          cp /tmp/mikrotik/all_cn_ipv6.txt /tmp/mikrotik_cn_ipv6.txt
+
           rsc="/tmp/cn_ip_cidr.rsc"
           {
             printf '%s\n' '/log info "Import cn ipv4 cidr list..."'
@@ -82,6 +85,36 @@ jobs:
             printf '%s\n' '}'
           } > "$rsc"
           test -s "$rsc"
+
+      - name: Publish MikroTik CN lists to tearsful/geo latest
+        env:
+          GH_TOKEN: ${{ secrets.TEARSFUL_GEO_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test -s /tmp/mikrotik_cn_ipv4.txt
+          test -s /tmp/mikrotik_cn_ipv6.txt
+          repo="tearsful/geo"
+          if gh release view latest --repo "$repo" >/dev/null 2>&1; then
+            gh release upload latest \
+              --repo "$repo" \
+              --clobber \
+              /tmp/mikrotik_cn_ipv4.txt \
+              /tmp/mikrotik_cn_ipv6.txt
+          else
+            gh release create latest \
+              --repo "$repo" \
+              --title "latest" \
+              --notes "MikroTik CN IPv4/IPv6 CIDR lists (auto-updated)." \
+              /tmp/mikrotik_cn_ipv4.txt \
+              /tmp/mikrotik_cn_ipv6.txt
+          fi
+          gh release edit latest --repo "$repo" --latest
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            [ "$tag" = "latest" ] && continue
+            gh release delete "$tag" --repo "$repo" --yes --cleanup-tag || true
+          done < <(gh release list --repo "$repo" --limit 100 --json tagName -q '.[].tagName')
 
       - name: Download additional rule lists
         run: |
