@@ -89,14 +89,24 @@ jobs:
       - name: Publish MikroTik CN lists to public geo latest
         env:
           GH_TOKEN: ${{ secrets.TEARSFUL_GEO_RELEASE_TOKEN }}
-          TEARSFUL_GEO_REPO: ${{ vars.TEARSFUL_GEO_REPO }}
+          TEARSFUL_GEO_REPO_VAR: ${{ vars.TEARSFUL_GEO_REPO }}
+          TEARSFUL_GEO_REPO_SECRET: ${{ secrets.TEARSFUL_GEO_REPO }}
         run: |
           set -euo pipefail
-          test -n "$GH_TOKEN"
-          test -n "$TEARSFUL_GEO_REPO"
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "Missing secret TEARSFUL_GEO_RELEASE_TOKEN (create PAT on GitHub account, paste into geo-cf Actions secret)." >&2
+            exit 1
+          fi
+          repo="${TEARSFUL_GEO_REPO_VAR:-}"
+          if [ -z "$repo" ]; then
+            repo="${TEARSFUL_GEO_REPO_SECRET:-}"
+          fi
+          if [ -z "$repo" ]; then
+            echo "Missing TEARSFUL_GEO_REPO: set Actions Variable TEARSFUL_GEO_REPO and/or Secret TEARSFUL_GEO_REPO (value like tearsful/geo)." >&2
+            exit 1
+          fi
           test -s /tmp/mikrotik_cn_ipv4.txt
           test -s /tmp/mikrotik_cn_ipv6.txt
-          repo="$TEARSFUL_GEO_REPO"
           if gh release view latest --repo "$repo" >/dev/null 2>&1; then
             gh release upload latest \
               --repo "$repo" \

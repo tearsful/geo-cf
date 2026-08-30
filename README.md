@@ -39,11 +39,12 @@ GitHub Release 还会单独附带 `cn_ip_cidr.rsc`（MikroTik 导入脚本，不
 - Name：`TEARSFUL_GEO_RELEASE_TOKEN`
 - Secret：粘贴上一步复制的 PAT
 
-**3. 配置 Variable（仓库级，非 Secret）**
+**3. 配置目标仓库 `owner/repo`（二选一，不要留空）**
 
-- 同一页面 **Variables** → New repository variable
-- Name：`TEARSFUL_GEO_REPO`
-- Value：`tearsful/geo`（`owner/repo` 格式）
+- **Variables（推荐）**：Name `TEARSFUL_GEO_REPO`，Value 如 `tearsful/geo`
+- **或 Secrets**：Name `TEARSFUL_GEO_REPO`，Value 同样填 `tearsful/geo`（若你习惯两个都建在 Secrets 里也可以）
+
+工作流会优先读 Variable，没有时再读同名 Secret。
 
 ## PVE 本地生成 `cn_ip_cidr.rsc`
 
