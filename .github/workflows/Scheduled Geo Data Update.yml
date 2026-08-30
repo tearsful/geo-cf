@@ -86,15 +86,17 @@ jobs:
           } > "$rsc"
           test -s "$rsc"
 
-      - name: Publish MikroTik CN lists to tearsful/geo latest
+      - name: Publish MikroTik CN lists to public geo latest
         env:
           GH_TOKEN: ${{ secrets.TEARSFUL_GEO_RELEASE_TOKEN }}
+          TEARSFUL_GEO_REPO: ${{ vars.TEARSFUL_GEO_REPO }}
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN"
+          test -n "$TEARSFUL_GEO_REPO"
           test -s /tmp/mikrotik_cn_ipv4.txt
           test -s /tmp/mikrotik_cn_ipv6.txt
-          repo="tearsful/geo"
+          repo="$TEARSFUL_GEO_REPO"
           if gh release view latest --repo "$repo" >/dev/null 2>&1; then
             gh release upload latest \
               --repo "$repo" \

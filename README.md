@@ -21,9 +21,15 @@ GitHub Release 还会单独附带 `cn_ip_cidr.rsc`（MikroTik 导入脚本，不
 
 另会将 `mikrotik_cn_ipv4.txt`、`mikrotik_cn_ipv6.txt` 同步到公共仓库 [tearsful/geo](https://github.com/tearsful/geo) 的 **`latest` Release**（不存在则创建；每次覆盖同名资产；并删除该仓库内除 `latest` 外的其它 Release，只保留一份）。
 
-在 **geo-cf** 的 Repository Secrets 中配置：
+在 **geo-cf** 仓库的 Actions 配置中：
 
-- `TEARSFUL_GEO_RELEASE_TOKEN`：对 `tearsful/geo` 具备 `contents` 写权限的 PAT（经典 token 选 `repo`，或 fine-grained 授权该仓库）。
+**Secrets**
+
+- `TEARSFUL_GEO_RELEASE_TOKEN`：对目标公共仓库具备 `contents` 写权限的 PAT（经典 token 选 `repo`，或 fine-grained 授权该仓库）。
+
+**Variables**
+
+- `TEARSFUL_GEO_REPO`：目标仓库，格式 `owner/repo`（例如 `tearsful/geo`）。
 
 ## PVE 本地生成 `cn_ip_cidr.rsc`
 
