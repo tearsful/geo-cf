@@ -93,40 +93,97 @@ jobs:
           TEARSFUL_GEO_REPO_SECRET: ${{ secrets.TEARSFUL_GEO_REPO }}
         run: |
           set -euo pipefail
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "Missing secret TEARSFUL_GEO_RELEASE_TOKEN (create PAT on GitHub account, paste into geo-cf Actions secret)." >&2
+          GH_TOKEN="$(printf '%s' "${GH_TOKEN:-}" | tr -d '\r\n')"
+          repo="$(printf '%s' "${TEARSFUL_GEO_REPO_VAR:-}" | tr -d '\r\n')"
+          if [ -z "$repo" ]; then
+            repo="$(printf '%s' "${TEARSFUL_GEO_REPO_SECRET:-}" | tr -d '\r\n')"
+          fi
+          repo="${repo#https://github.com/}"
+          repo="${repo#http://github.com/}"
+          repo="${repo%.git}"
+
+          echo "Publish config: GH_TOKEN length=${#GH_TOKEN}, repo_var length=${#TEARSFUL_GEO_REPO_VAR}, repo_secret length=${#TEARSFUL_GEO_REPO_SECRET}"
+          echo "Target repository: ${repo:-<empty>}"
+
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Missing secret TEARSFUL_GEO_RELEASE_TOKEN." >&2
             exit 1
           fi
-          repo="${TEARSFUL_GEO_REPO_VAR:-}"
-          if [ -z "$repo" ]; then
-            repo="${TEARSFUL_GEO_REPO_SECRET:-}"
-          fi
-          if [ -z "$repo" ]; then
-            echo "Missing TEARSFUL_GEO_REPO: set Actions Variable TEARSFUL_GEO_REPO and/or Secret TEARSFUL_GEO_REPO (value like tearsful/geo)." >&2
+          if [ -z "$repo" ] || [ "${repo#*/}" = "$repo" ]; then
+            echo "Missing or invalid TEARSFUL_GEO_REPO (need owner/repo, e.g. tearsful/geo)." >&2
             exit 1
           fi
           test -s /tmp/mikrotik_cn_ipv4.txt
           test -s /tmp/mikrotik_cn_ipv6.txt
-          if gh release view latest --repo "$repo" >/dev/null 2>&1; then
-            gh release upload latest \
-              --repo "$repo" \
-              --clobber \
-              /tmp/mikrotik_cn_ipv4.txt \
-              /tmp/mikrotik_cn_ipv6.txt
-          else
-            gh release create latest \
-              --repo "$repo" \
-              --title "latest" \
-              --notes "MikroTik CN IPv4/IPv6 CIDR lists (auto-updated)." \
-              /tmp/mikrotik_cn_ipv4.txt \
-              /tmp/mikrotik_cn_ipv6.txt
+
+          owner="${repo%%/*}"
+          name="${repo#*/}"
+          api() {
+            curl -sS -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$@"
+          }
+
+          http_code="$(api -o /tmp/geo_pub_release.json -w '%{http_code}' \
+            "https://api.github.com/repos/${owner}/${name}/releases/tags/latest")"
+          echo "GET release tags/latest HTTP ${http_code}"
+
+          if [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; then
+            echo "GitHub API auth failed. Check TEARSFUL_GEO_RELEASE_TOKEN permissions for ${repo}." >&2
+            cat /tmp/geo_pub_release.json >&2 || true
+            exit 1
           fi
-          gh release edit latest --repo "$repo" --latest
-          while IFS= read -r tag; do
+
+          if [ "$http_code" = "404" ]; then
+            http_code="$(api -o /tmp/geo_pub_release.json -w '%{http_code}' -X POST \
+              "https://api.github.com/repos/${owner}/${name}/releases" \
+              -d '{"tag_name":"latest","name":"latest","body":"MikroTik CN IPv4/IPv6 CIDR lists (auto-updated).","make_latest":true}')"
+            echo "POST create release HTTP ${http_code}"
+            if [ "$http_code" != "201" ]; then
+              cat /tmp/geo_pub_release.json >&2 || true
+              exit 1
+            fi
+          elif [ "$http_code" != "200" ]; then
+            cat /tmp/geo_pub_release.json >&2 || true
+            exit 1
+          fi
+
+          release_id="$(jq -r '.id' /tmp/geo_pub_release.json)"
+          upload_base="$(jq -r '.upload_url' /tmp/geo_pub_release.json | sed 's/{?name,label}//')"
+
+          for asset in mikrotik_cn_ipv4.txt mikrotik_cn_ipv6.txt; do
+            asset_id="$(jq -r --arg n "$asset" '.assets[]? | select(.name==$n) | .id' /tmp/geo_pub_release.json)"
+            if [ -n "$asset_id" ] && [ "$asset_id" != "null" ]; then
+              api -o /tmp/geo_pub_delete.json -w '%{http_code}' -X DELETE \
+                "https://api.github.com/repos/${owner}/${name}/releases/assets/${asset_id}" >/dev/null
+            fi
+            http_code="$(api -o /tmp/geo_pub_upload.json -w '%{http_code}' -X POST \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary "@/tmp/${asset}" \
+              "${upload_base}?name=${asset}")"
+            echo "Upload ${asset} HTTP ${http_code}"
+            if [ "$http_code" != "201" ]; then
+              cat /tmp/geo_pub_upload.json >&2 || true
+              exit 1
+            fi
+          done
+
+          api -o /tmp/geo_pub_latest.json -X PATCH \
+            "https://api.github.com/repos/${owner}/${name}/releases/${release_id}" \
+            -d '{"make_latest":true}' >/dev/null
+
+          api -o /tmp/geo_pub_release_list.json \
+            "https://api.github.com/repos/${owner}/${name}/releases?per_page=100" >/dev/null
+          jq -r '.[].tag_name' /tmp/geo_pub_release_list.json | while IFS= read -r tag; do
             [ -z "$tag" ] && continue
             [ "$tag" = "latest" ] && continue
-            gh release delete "$tag" --repo "$repo" --yes --cleanup-tag || true
-          done < <(gh release list --repo "$repo" --limit 100 --json tagName -q '.[].tagName')
+            rid="$(jq -r --arg t "$tag" '.[] | select(.tag_name==$t) | .id' /tmp/geo_pub_release_list.json)"
+            [ -n "$rid" ] && [ "$rid" != "null" ] || continue
+            api -X DELETE "https://api.github.com/repos/${owner}/${name}/releases/${rid}" >/dev/null || true
+          done
+
+          echo "Published mikrotik_cn_ipv4.txt and mikrotik_cn_ipv6.txt to ${repo} release latest"
 
       - name: Download additional rule lists
         run: |
