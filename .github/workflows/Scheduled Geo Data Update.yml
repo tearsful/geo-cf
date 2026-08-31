@@ -16,8 +16,8 @@ on:
           - 7d
           - default
   schedule:
-    # 北京时间 08:15 AM 运行 (即 UTC 00:00)
-    - cron: '15 0 * * *'
+    # 北京时间每天 10:00（UTC 02:00）
+    - cron: '0 2 * * *'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -124,6 +124,23 @@ jobs:
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "$@"
           }
+
+          perm_code="$(api -o /tmp/geo_pub_perm.json -w '%{http_code}' \
+            "https://api.github.com/repos/${owner}/${name}")"
+          echo "GET repo HTTP ${perm_code}, push=$(jq -r '.permissions.push // "n/a"' /tmp/geo_pub_perm.json)"
+          if [ "$perm_code" = "404" ]; then
+            echo "Token cannot see ${repo}. Add this repo to the PAT repository list (fine-grained) or fix TEARSFUL_GEO_REPO." >&2
+            exit 1
+          fi
+          if [ "$perm_code" = "403" ]; then
+            echo "PAT cannot access ${repo}. Fine-grained: add repo + Contents Read and write; org repos may need SSO authorize." >&2
+            cat /tmp/geo_pub_perm.json >&2 || true
+            exit 1
+          fi
+          if [ "$(jq -r '.permissions.push // empty' /tmp/geo_pub_perm.json)" = "false" ]; then
+            echo "PAT has no push/Contents write on ${repo}. Upgrade token permissions, then update TEARSFUL_GEO_RELEASE_TOKEN in geo-cf." >&2
+            exit 1
+          fi
 
           http_code="$(api -o /tmp/geo_pub_release.json -w '%{http_code}' \
             "https://api.github.com/repos/${owner}/${name}/releases/tags/latest")"

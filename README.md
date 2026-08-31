@@ -46,6 +46,28 @@ GitHub Release 还会单独附带 `cn_ip_cidr.rsc`（MikroTik 导入脚本，不
 
 工作流会优先读 Variable，没有时再读同名 Secret。
 
+**若 Publish 步骤出现 `403` / `Resource not accessible by personal access token`**
+
+说明 PAT **看不到或不能写** `TEARSFUL_GEO_REPO` 指向的仓库（常见：Fine-grained 只勾了 `geo-cf`，没勾 `tearsful/geo`；或 **Contents 仍是 Read-only**）。
+
+请重新编辑或新建 Token（账号 **Settings → Developer settings → Personal access tokens**）：
+
+| 类型 | 必做 |
+|------|------|
+| **Fine-grained** | Repository access → **Only select repositories** → 勾选 **`tearsful/geo`**（与 Secret 里 `TEARSFUL_GEO_REPO` 一致）；Permissions → **Contents → Read and write**；**Metadata** 保持 Read（默认即可）。 |
+| **Classic** | 勾选 **`repo`**（私有库）或至少 **`public_repo`**（仅公开库且只需写 Release 时有时不够，建议直接 `repo`）。 |
+
+保存后把**新 token 字符串**更新到 geo-cf 的 Secret **`TEARSFUL_GEO_RELEASE_TOKEN`**（改权限不会自动刷新旧 Secret）。若目标库在组织下且启用 SSO，还需在 Token 列表里对该 token 点 **Configure SSO → Authorize**。
+
+本地自测（将 `YOUR_PAT` 换成新 token）：
+
+```bash
+curl -sS -H "Authorization: Bearer YOUR_PAT" -H "Accept: application/vnd.github+json" \
+  https://api.github.com/repos/tearsful/geo | jq '{full_name, permissions}'
+```
+
+应看到 `"push": true`，且 `POST` 创建 Release 不再返回 403。
+
 ## PVE 本地生成 `cn_ip_cidr.rsc`
 
 在 Proxmox VE 宿主机或 LXC/虚拟机中，可用仓库脚本本地生成与 GitHub Actions 相同逻辑的 MikroTik 脚本，无需跑完整工作流。
@@ -223,4 +245,13 @@ command curl -v -# \
 
 ## 更新说明
 
-工作流每天定时运行，也支持手动触发。每次运行会生成新的 Release，并上传最新的 `geo.zip` 与 `cn_ip_cidr.rsc`。
+| 工作流 | 定时（北京时间） | 说明 |
+|--------|------------------|------|
+| Scheduled Geo Data Update | 每天 **10:00** | 下载、打包、上传 Cloudflare、发 Release |
+| Delete Old Workflows | 每天 **10:05** | 删除超过 **1 天**的 Actions 运行记录；Release 仅保留最新 1 个 |
+
+GitHub `schedule` 使用 **UTC**；上表时间为 UTC+8，无夏令时。界面里 **手动 Run workflow** 的运行时间不会落在上述整点，只有 `schedule` 触发才对齐定时。
+
+清理 Actions 历史需要 workflow 内声明 `permissions: actions: write`（见 `Delete Old.yml`）。若仓库 **Settings → Actions → General → Workflow permissions** 为「Read」且组织策略禁止提升权限，需在仓库改为 **Read and write**，或改用具备 `actions: write` 的 PAT。
+
+工作流也支持手动触发。每次数据更新运行会生成新的 Release，并上传最新的 `geo.zip` 与 `cn_ip_cidr.rsc`。
