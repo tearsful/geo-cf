@@ -247,11 +247,8 @@ command curl -v -# \
 
 | 工作流 | 计划时刻（北京时间） | 说明 |
 |--------|----------------------|------|
-| Scheduled Geo Data Update | 每天 **10:10** | 下载、打包、上传 Cloudflare、发 Release |
-| Delete Old Workflows | 每天 **10:15** | 删除超过 **1 天**的 Actions 运行记录；Release 仅保留最新 1 个 |
+| Scheduled Geo Data Update | 每天 **10:10** | 下载、打包、上传 Cloudflare、发 Release；**成功后**删除超过 1 天的 Actions 运行记录，Release 仅保留最新 1 个 |
 
-两个 workflow 的 `schedule` 均使用 **`timezone: Asia/Shanghai`**，cron 为上述「计划时刻」。GitHub 只保证在该时刻**入队**，**不保证准时开跑**（高负载时可能延迟数小时）；分钟设为 10/15 而非整点，是为减轻 `:00` 的排队。界面里 **手动 Run workflow** 的时间与上表无关。
-
-清理 Actions 历史需要 workflow 内声明 `permissions: actions: write`（见 `Delete Old.yml`）。若仓库 **Settings → Actions → General → Workflow permissions** 为「Read」且组织策略禁止提升权限，需在仓库改为 **Read and write**，或改用具备 `actions: write` 的 PAT。
+`schedule` 使用 **`timezone: Asia/Shanghai`**。GitHub 只保证计划时刻入队，不保证准时开跑；分钟设为 10 以减轻整点排队。清理步骤在本工作流末尾，需 **`permissions: actions: write`** 与 **contents: write**（已写在 workflow 内）。若仓库 **Settings → Actions → General → Workflow permissions** 为「Read」且组织策略禁止提升权限，需改为 **Read and write**。
 
 工作流也支持手动触发。每次数据更新运行会生成新的 Release，并上传最新的 `geo.zip` 与 `cn_ip_cidr.rsc`。
