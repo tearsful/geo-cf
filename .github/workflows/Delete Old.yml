@@ -3,8 +3,9 @@ name: Delete Old Workflows
 on:
   workflow_dispatch:
   schedule:
-    # 北京时间每天 10:05（UTC 02:05），略晚于数据更新任务
-    - cron: '5 2 * * *'
+    # 计划时刻：北京时间 10:15，略晚于数据更新任务
+    - cron: '15 10 * * *'
+      timezone: Asia/Shanghai
 
 permissions:
   actions: write

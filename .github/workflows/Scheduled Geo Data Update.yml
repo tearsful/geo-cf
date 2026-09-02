@@ -16,8 +16,9 @@ on:
           - 7d
           - default
   schedule:
-    # 北京时间每天 10:00（UTC 02:00）
-    - cron: '0 2 * * *'
+    # 计划时刻：北京时间 10:10（Asia/Shanghai；错开整点减轻排队，实际开跑可能更晚）
+    - cron: '10 10 * * *'
+      timezone: Asia/Shanghai
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

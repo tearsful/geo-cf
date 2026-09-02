@@ -245,12 +245,12 @@ command curl -v -# \
 
 ## 更新说明
 
-| 工作流 | 定时（北京时间） | 说明 |
-|--------|------------------|------|
-| Scheduled Geo Data Update | 每天 **10:00** | 下载、打包、上传 Cloudflare、发 Release |
-| Delete Old Workflows | 每天 **10:05** | 删除超过 **1 天**的 Actions 运行记录；Release 仅保留最新 1 个 |
+| 工作流 | 计划时刻（北京时间） | 说明 |
+|--------|----------------------|------|
+| Scheduled Geo Data Update | 每天 **10:10** | 下载、打包、上传 Cloudflare、发 Release |
+| Delete Old Workflows | 每天 **10:15** | 删除超过 **1 天**的 Actions 运行记录；Release 仅保留最新 1 个 |
 
-GitHub `schedule` 使用 **UTC**；上表时间为 UTC+8，无夏令时。界面里 **手动 Run workflow** 的运行时间不会落在上述整点，只有 `schedule` 触发才对齐定时。
+两个 workflow 的 `schedule` 均使用 **`timezone: Asia/Shanghai`**，cron 为上述「计划时刻」。GitHub 只保证在该时刻**入队**，**不保证准时开跑**（高负载时可能延迟数小时）；分钟设为 10/15 而非整点，是为减轻 `:00` 的排队。界面里 **手动 Run workflow** 的时间与上表无关。
 
 清理 Actions 历史需要 workflow 内声明 `permissions: actions: write`（见 `Delete Old.yml`）。若仓库 **Settings → Actions → General → Workflow permissions** 为「Read」且组织策略禁止提升权限，需在仓库改为 **Read and write**，或改用具备 `actions: write` 的 PAT。
 
