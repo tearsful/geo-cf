@@ -245,10 +245,10 @@ command curl -v -# \
 
 ## 更新说明
 
-| 工作流 | 计划时刻（北京时间） | 说明 |
+| 工作流 | 计划入队（北京时间） | 说明 |
 |--------|----------------------|------|
-| Scheduled Geo Data Update | 每天 **10:10** | 下载、打包、上传 Cloudflare、发 Release；**成功后**删除超过 1 天的 Actions 运行记录，Release 仅保留最新 1 个 |
+| Scheduled Geo Data Update | 每天 **04:10** | 下载、打包、上传 Cloudflare、发 Release；**成功后**删除超过 1 天的 Actions 运行记录，Release 仅保留最新 1 个 |
 
-`schedule` 使用 **`timezone: Asia/Shanghai`**。GitHub 只保证计划时刻入队，不保证准时开跑；分钟设为 10 以减轻整点排队。清理步骤在本工作流末尾，需 **`permissions: actions: write`** 与 **contents: write**（已写在 workflow 内）。若仓库 **Settings → Actions → General → Workflow permissions** 为「Read」且组织策略禁止提升权限，需改为 **Read and write**。
+`schedule` 使用 **`timezone: Asia/Shanghai`**。GitHub 只保证计划时刻入队，不保证准时开跑（近年观察常延迟约 5 小时），故将计划设在 **04:10**，期望实际开跑落在 **10:00 前后**。清理步骤在本工作流末尾，需 **`permissions: actions: write`** 与 **contents: write**（已写在 workflow 内）。若仓库 **Settings → Actions → General → Workflow permissions** 为「Read」且组织策略禁止提升权限，需改为 **Read and write**。
 
 工作流也支持手动触发。每次数据更新运行会生成新的 Release，并上传最新的 `geo.zip` 与 `cn_ip_cidr.rsc`。

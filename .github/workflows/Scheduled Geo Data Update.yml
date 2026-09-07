@@ -16,8 +16,8 @@ on:
           - 7d
           - default
   schedule:
-    # 计划时刻：北京时间 10:10（Asia/Shanghai；错开整点减轻排队，实际开跑可能更晚）
-    - cron: '10 10 * * *'
+    # 计划入队：北京 04:10（经验提前约 6h，抵消 schedule 延迟，目标实际约 10:00 前后）
+    - cron: '10 4 * * *'
       timezone: Asia/Shanghai
 
 permissions:
