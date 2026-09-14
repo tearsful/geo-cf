@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       expiration:
-        description: 'geo.zip expiration after upload'
+        description: 'geo.zip / ruleset.zip expiration after Cloudflare upload'
         required: true
         default: 'never'
         type: choice
@@ -257,6 +257,109 @@ jobs:
           cd /tmp/geo-release
           zip -r /tmp/geo.zip .
 
+      - name: Download and package mihomo ruleset.zip
+        run: |
+          set -euo pipefail
+          # 资源列表来自 mihomo internal/config/ruleset.go 的 ruleProviderEntries。
+          # GitHub Actions 可直连 GitHub，故剥离 gh-proxy 前缀；失败再回退原 URL。
+          STAGE="/tmp/ruleset-release"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE/ruleset"
+
+          strip_proxy() {
+            local u="$1"
+            u="${u#https://v4.gh-proxy.org/}"
+            u="${u#https://v6.gh-proxy.org/}"
+            u="${u#https://ghfast.top/}"
+            u="${u#https://gh-proxy.com/}"
+            u="${u#https://mirror.ghproxy.com/}"
+            printf '%s' "$u"
+          }
+
+          download_one() {
+            local rel="$1"
+            local stored="$2"
+            local out raw try_url
+            if [[ "$rel" == ../* ]]; then
+              out="${STAGE}/${rel#../}"
+            else
+              out="${STAGE}/${rel}"
+            fi
+            mkdir -p "$(dirname "$out")"
+            raw="$(strip_proxy "$stored")"
+            for try_url in "$raw" "$stored"; do
+              [ -n "$try_url" ] || continue
+              echo "Downloading ${rel} <- ${try_url}"
+              if wget -q -O "$out.tmp" "$try_url" && [ -s "$out.tmp" ]; then
+                if head -c 256 "$out.tmp" | tr '[:upper:]' '[:lower:]' | grep -qE '<!doctype|<html'; then
+                  echo "Rejected HTML response for ${rel}" >&2
+                  rm -f "$out.tmp"
+                  continue
+                fi
+                mv -f "$out.tmp" "$out"
+                return 0
+              fi
+              rm -f "$out.tmp"
+            done
+            echo "Failed to download ${rel}" >&2
+            return 1
+          }
+
+          while IFS='|' read -r rel url; do
+            rel="${rel#"${rel%%[![:space:]]*}"}"
+            [ -z "${rel:-}" ] && continue
+            download_one "$rel" "$url"
+          done <<'EOF'
+          ruleset/AWAvenue_Ads_Rule_Clash.mrs|https://cdn.uura.cn/AWAvenue/AWAvenue-Ads-Rule-Clash.mrs
+          ruleset/banAd.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/Lanlan13-14/Rules/refs/heads/main/rules/Domain/banAd.mrs
+          ruleset/blackmatrix7_ad.yaml|https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Advertising/Advertising.yaml
+          ruleset/category-porn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-porn.mrs
+          ruleset/fakeip-filter.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/fakeip-filter.mrs
+          ruleset/ads.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/ads.mrs
+          ruleset/trackerslist.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/trackerslist.mrs
+          ruleset/apple-cn.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/apple-cn.mrs
+          ruleset/google-cn.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/google-cn.mrs
+          ruleset/microsoft-cn.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/microsoft-cn.mrs
+          ruleset/games-cn.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/games-cn.mrs
+          ruleset/ai.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/ai.mrs
+          ruleset/tld-proxy.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/tld-proxy.mrs
+          ruleset/gfw.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/gfw.mrs
+          ruleset/proxy.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/proxy.mrs
+          ruleset/geosite-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/cn.mrs
+          ruleset/geosite-private.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/private.mrs
+          ruleset/geosite-geolocation-not-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/geolocation-%21cn.mrs
+          ruleset/geosite-category-ads-all.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-ads-all.mrs
+          ruleset/geosite-youtube.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/youtube.mrs
+          ruleset/geosite-steam-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/steam%40cn.mrs
+          ruleset/geosite-icloud-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/icloud%40cn.mrs
+          ruleset/geosite-telegram.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/telegram.mrs
+          ruleset/geosite-whatsapp.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/whatsapp.mrs
+          ruleset/geosite-twitter.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/twitter.mrs
+          ruleset/geosite-facebook.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/facebook.mrs
+          ruleset/geosite-tiktok.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/tiktok.mrs
+          ruleset/geosite-netflix.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/netflix.mrs
+          ruleset/geoip-private.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/private.mrs
+          ruleset/geoip-telegram.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/telegram.mrs
+          ruleset/geoip-twitter.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/twitter.mrs
+          ruleset/geoip-facebook.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/facebook.mrs
+          ruleset/geoip-netflix.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/netflix.mrs
+          ruleset/geoip-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/cn.mrs
+          ruleset/category-ntp-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-ntp%40cn.mrs
+          ruleset/category-ntp.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-ntp.mrs
+          ruleset/geosite-anthropic.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/anthropic.mrs
+          ruleset/AS399358.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/asn/AS399358.mrs
+          ../geoip.metadb|https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb
+          EOF
+
+          file_count="$(find "$STAGE" -type f | wc -l | tr -d ' ')"
+          echo "Downloaded ${file_count} ruleset files"
+          test "$file_count" -ge 39
+          test -s "$STAGE/geoip.metadb"
+          (cd "$STAGE" && zip -r /tmp/ruleset.zip .)
+          test -s /tmp/ruleset.zip
+          ls -lh /tmp/ruleset.zip
+          unzip -l /tmp/ruleset.zip | tail -n 5
+
       - name: Upload geo.zip to Cloudflare server
         env:
           CLOUDFLARE_SITE_USER: ${{ secrets.CLOUDFLARE_SITE_USER }}
@@ -296,6 +399,46 @@ jobs:
             exit 1
           fi
 
+      - name: Upload ruleset.zip to Cloudflare server
+        env:
+          CLOUDFLARE_SITE_USER: ${{ secrets.CLOUDFLARE_SITE_USER }}
+          CLOUDFLARE_SITE_PASS: ${{ secrets.CLOUDFLARE_SITE_PASS }}
+          CLOUDFLARE_RULESET_MANAGE_URL: ${{ secrets.CLOUDFLARE_RULESET_MANAGE_URL }}
+          CLOUDFLARE_MANAGE_PASS: ${{ secrets.CLOUDFLARE_MANAGE_PASS }}
+          CI_UPLOAD_TOKEN: ${{ secrets.CI_UPLOAD_TOKEN }}
+          RULESET_ZIP_EXPIRATION: ${{ github.event_name == 'workflow_dispatch' && inputs.expiration || 'never' }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_SITE_USER"
+          test -n "$CLOUDFLARE_SITE_PASS"
+          test -n "$CLOUDFLARE_RULESET_MANAGE_URL"
+          test -n "$CLOUDFLARE_MANAGE_PASS"
+          test -n "$CI_UPLOAD_TOKEN"
+          test -s /tmp/ruleset.zip
+          SITE_USER="$(printf '%s' "$CLOUDFLARE_SITE_USER" | tr -d '\r\n')"
+          SITE_PASS="$(printf '%s' "$CLOUDFLARE_SITE_PASS" | tr -d '\r\n')"
+          MANAGE_URL="$(printf '%s' "$CLOUDFLARE_RULESET_MANAGE_URL" | tr -d '\r\n')"
+          MANAGE_PASS="$(printf '%s' "$CLOUDFLARE_MANAGE_PASS" | tr -d '\r\n')"
+          UPLOAD_TOKEN="$(printf '%s' "$CI_UPLOAD_TOKEN" | tr -d '\r\n')"
+          EXPIRATION="$(printf '%s' "$RULESET_ZIP_EXPIRATION" | tr -d '\r\n')"
+          curl_form_args=(-F "c=@/tmp/ruleset.zip")
+          if [ "$EXPIRATION" != "default" ]; then
+            curl_form_args+=(-F "e=${EXPIRATION}")
+          fi
+          HTTP_STATUS="$(command curl --show-error -# \
+            --output /tmp/cloudflare-ruleset-upload-response.txt \
+            --write-out "%{http_code}" \
+            --url "${MANAGE_URL}:${MANAGE_PASS}" \
+            -H "X-CI-Upload-Token: ${UPLOAD_TOKEN}" \
+            -u "${SITE_USER}:${SITE_PASS}" \
+            -X PUT \
+            "${curl_form_args[@]}")"
+          printf '\nHTTP_STATUS=%s\n' "$HTTP_STATUS"
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            sed -n '1,80p' /tmp/cloudflare-ruleset-upload-response.txt
+            exit 1
+          fi
+
       - name: Get current date
         id: date
         run: echo "date=$(date +'%y%m%d%H%M%S')" >> $GITHUB_OUTPUT
@@ -309,6 +452,7 @@ jobs:
           prerelease: false
           files: |
             /tmp/geo.zip
+            /tmp/ruleset.zip
             /tmp/cn_ip_cidr.rsc
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

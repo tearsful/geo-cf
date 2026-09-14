@@ -1,6 +1,6 @@
 # 每天更新 geo 数据包
 
-该项目通过 GitHub Actions 定时下载 geo 数据和规则文件，打包为 `geo.zip` 后发布到 GitHub Release，并同步上传到 Cloudflare 对应服务器。
+该项目通过 GitHub Actions 定时下载 geo 数据、mihomo ruleset 和规则文件，打包为 `geo.zip` / `ruleset.zip` 后发布到 GitHub Release，并同步上传到 Cloudflare 对应服务器。
 
 ## 描述
 
@@ -15,9 +15,9 @@
 - `all_cn_ipv6.txt`
 - `cloudflare-cidr.txt`，来自 Cloudflare IPs API
 
-GitHub Release 还会单独附带 `cn_ip_cidr.rsc`（MikroTik 导入脚本，不包含在 `geo.zip` 内）。
+GitHub Release 还会单独附带 `cn_ip_cidr.rsc`（MikroTik 导入脚本，不包含在 `geo.zip` 内）与 `ruleset.zip`（mihomo `ruleProviderEntries` 全量规则集 + `geoip.metadb`）。
 
-打包产物为 `geo.zip`，会作为 Release 资产上传到本仓库（`geo-cf`）。
+打包产物为 `geo.zip` / `ruleset.zip`，会作为 Release 资产上传到本仓库（`geo-cf`）。
 
 另会将 `mikrotik_cn_ipv4.txt`、`mikrotik_cn_ipv6.txt` 同步到公共仓库 [tearsful/geo](https://github.com/tearsful/geo) 的 **`latest` Release**（不存在则创建；每次覆盖同名资产；并删除该仓库内除 `latest` 外的其它 Release，只保留一份）。
 
@@ -161,7 +161,7 @@ IPv6 段脚本内已用 `:if ([:len [/ipv6 dhcp-cl find where status=bound]] > 0
 
 ## Cloudflare 同步
 
-`geo.zip` 打包完成后，工作流会通过 `curl` 使用 `PUT` 请求同步到 Cloudflare 对应服务器。上传请求会携带自定义请求头：
+`geo.zip` 与 `ruleset.zip` 打包完成后，工作流会分别通过 `curl` 使用 `PUT` 请求同步到 Cloudflare 对应上传地址。上传请求会携带自定义请求头：
 
 ```bash
 X-CI-Upload-Token: ${CI_UPLOAD_TOKEN}
@@ -169,11 +169,21 @@ X-CI-Upload-Token: ${CI_UPLOAD_TOKEN}
 
 需要在 GitHub Repository Secrets 中配置以下变量：
 
-- `CLOUDFLARE_SITE_USER`
-- `CLOUDFLARE_SITE_PASS`
-- `CLOUDFLARE_MANAGE_URL`
-- `CLOUDFLARE_MANAGE_PASS`
-- `CI_UPLOAD_TOKEN`
+| Secret | 用途 |
+|--------|------|
+| `CLOUDFLARE_SITE_USER` | Basic Auth 用户名（geo / ruleset 共用） |
+| `CLOUDFLARE_SITE_PASS` | Basic Auth 密码（共用） |
+| `CLOUDFLARE_MANAGE_URL` | **geo.zip** 上传管理 URL（不含管理密码） |
+| `CLOUDFLARE_RULESET_MANAGE_URL` | **ruleset.zip** 上传管理 URL（不含管理密码） |
+| `CLOUDFLARE_MANAGE_PASS` | 管理 URL 后缀密码（共用） |
+| `CI_UPLOAD_TOKEN` | 自定义上传 Token（共用，请求头 `X-CI-Upload-Token`） |
+
+**新增 Secret（本次必须配置）：**
+
+- Name：`CLOUDFLARE_RULESET_MANAGE_URL`
+- Value：填你的 **ruleset.zip** 上传管理 URL（**不要**写进 README / 提交到仓库；只放进 Secret）
+
+其余与现有 `geo.zip` 上传相同，无需重复创建。
 
 `CI_UPLOAD_TOKEN` 是自定义共享密钥，可使用以下命令生成：
 
@@ -181,12 +191,12 @@ X-CI-Upload-Token: ${CI_UPLOAD_TOKEN}
 openssl rand -hex 32
 ```
 
-Cloudflare 自定义规则需要匹配上传请求的域名、方法、路径和请求头，例如：
+Cloudflare 自定义规则需要匹配上传请求的域名、方法、路径和请求头。`geo.zip` 与 `ruleset.zip` 若路径不同，需分别放行（或按路径分别建规则），例如：
 
 ```text
 (http.host eq "你的上传域名"
  and http.request.method eq "PUT"
- and starts_with(http.request.uri.path, "/你的上传路径")
+ and starts_with(http.request.uri.path, "/你的 ruleset 上传路径")
  and any(http.request.headers["x-ci-upload-token"][*] eq "你的 CI_UPLOAD_TOKEN"))
 ```
 
@@ -247,8 +257,8 @@ command curl -v -# \
 
 | 工作流 | 计划入队（北京时间） | 说明 |
 |--------|----------------------|------|
-| Scheduled Geo Data Update | 每天 **04:10** | 下载、打包、上传 Cloudflare、发 Release；**成功后**删除超过 1 天的 Actions 运行记录，Release 仅保留最新 1 个 |
+| Scheduled Geo Data Update | 每天 **04:10** | 下载、打包、上传 Cloudflare（`geo.zip` + `ruleset.zip`）、发 Release；**成功后**删除超过 1 天的 Actions 运行记录，Release 仅保留最新 1 个 |
 
 `schedule` 使用 **`timezone: Asia/Shanghai`**。GitHub 只保证计划时刻入队，不保证准时开跑（近年观察常延迟约 5 小时），故将计划设在 **04:10**，期望实际开跑落在 **10:00 前后**。清理步骤在本工作流末尾，需 **`permissions: actions: write`** 与 **contents: write**（已写在 workflow 内）。若仓库 **Settings → Actions → General → Workflow permissions** 为「Read」且组织策略禁止提升权限，需改为 **Read and write**。
 
-工作流也支持手动触发。每次数据更新运行会生成新的 Release，并上传最新的 `geo.zip` 与 `cn_ip_cidr.rsc`。
+工作流也支持手动触发。每次数据更新运行会生成新的 Release，并上传最新的 `geo.zip`、`ruleset.zip` 与 `cn_ip_cidr.rsc`。
