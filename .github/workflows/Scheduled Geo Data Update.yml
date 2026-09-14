@@ -261,47 +261,37 @@ jobs:
         run: |
           set -euo pipefail
           # 资源列表来自 mihomo internal/config/ruleset.go 的 ruleProviderEntries。
-          # GitHub Actions 可直连 GitHub，故剥离 gh-proxy 前缀；失败再回退原 URL。
+          # CI 仅直连原始 URL（GitHub / jsDelivr / cdn），不使用任何 gh-proxy。
           STAGE="/tmp/ruleset-release"
           rm -rf "$STAGE"
           mkdir -p "$STAGE/ruleset"
 
-          strip_proxy() {
-            local u="$1"
-            u="${u#https://v4.gh-proxy.org/}"
-            u="${u#https://v6.gh-proxy.org/}"
-            u="${u#https://ghfast.top/}"
-            u="${u#https://gh-proxy.com/}"
-            u="${u#https://mirror.ghproxy.com/}"
-            printf '%s' "$u"
-          }
-
           download_one() {
             local rel="$1"
-            local stored="$2"
-            local out raw try_url
+            local url="$2"
+            local out
             if [[ "$rel" == ../* ]]; then
               out="${STAGE}/${rel#../}"
             else
               out="${STAGE}/${rel}"
             fi
             mkdir -p "$(dirname "$out")"
-            raw="$(strip_proxy "$stored")"
-            for try_url in "$raw" "$stored"; do
-              [ -n "$try_url" ] || continue
-              echo "Downloading ${rel} <- ${try_url}"
-              if wget -q -O "$out.tmp" "$try_url" && [ -s "$out.tmp" ]; then
+            for attempt in 1 2 3; do
+              echo "Downloading ${rel} <- ${url} (attempt ${attempt}/3)"
+              if wget -q -O "$out.tmp" "$url" && [ -s "$out.tmp" ]; then
                 if head -c 256 "$out.tmp" | tr '[:upper:]' '[:lower:]' | grep -qE '<!doctype|<html'; then
                   echo "Rejected HTML response for ${rel}" >&2
                   rm -f "$out.tmp"
-                  continue
+                else
+                  mv -f "$out.tmp" "$out"
+                  return 0
                 fi
-                mv -f "$out.tmp" "$out"
-                return 0
+              else
+                rm -f "$out.tmp"
               fi
-              rm -f "$out.tmp"
+              [ "$attempt" -lt 3 ] && sleep 2
             done
-            echo "Failed to download ${rel}" >&2
+            echo "Failed to download ${rel} from ${url}" >&2
             return 1
           }
 
@@ -311,43 +301,43 @@ jobs:
             download_one "$rel" "$url"
           done <<'EOF'
           ruleset/AWAvenue_Ads_Rule_Clash.mrs|https://cdn.uura.cn/AWAvenue/AWAvenue-Ads-Rule-Clash.mrs
-          ruleset/banAd.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/Lanlan13-14/Rules/refs/heads/main/rules/Domain/banAd.mrs
+          ruleset/banAd.mrs|https://raw.githubusercontent.com/Lanlan13-14/Rules/refs/heads/main/rules/Domain/banAd.mrs
           ruleset/blackmatrix7_ad.yaml|https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Advertising/Advertising.yaml
-          ruleset/category-porn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-porn.mrs
-          ruleset/fakeip-filter.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/fakeip-filter.mrs
-          ruleset/ads.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/ads.mrs
-          ruleset/trackerslist.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/trackerslist.mrs
-          ruleset/apple-cn.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/apple-cn.mrs
-          ruleset/google-cn.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/google-cn.mrs
-          ruleset/microsoft-cn.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/microsoft-cn.mrs
-          ruleset/games-cn.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/games-cn.mrs
-          ruleset/ai.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/ai.mrs
-          ruleset/tld-proxy.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/tld-proxy.mrs
-          ruleset/gfw.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/gfw.mrs
-          ruleset/proxy.mrs|https://v4.gh-proxy.org/https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/proxy.mrs
-          ruleset/geosite-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/cn.mrs
-          ruleset/geosite-private.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/private.mrs
-          ruleset/geosite-geolocation-not-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/geolocation-%21cn.mrs
-          ruleset/geosite-category-ads-all.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-ads-all.mrs
-          ruleset/geosite-youtube.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/youtube.mrs
-          ruleset/geosite-steam-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/steam%40cn.mrs
-          ruleset/geosite-icloud-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/icloud%40cn.mrs
-          ruleset/geosite-telegram.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/telegram.mrs
-          ruleset/geosite-whatsapp.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/whatsapp.mrs
-          ruleset/geosite-twitter.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/twitter.mrs
-          ruleset/geosite-facebook.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/facebook.mrs
-          ruleset/geosite-tiktok.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/tiktok.mrs
-          ruleset/geosite-netflix.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/netflix.mrs
-          ruleset/geoip-private.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/private.mrs
-          ruleset/geoip-telegram.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/telegram.mrs
-          ruleset/geoip-twitter.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/twitter.mrs
-          ruleset/geoip-facebook.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/facebook.mrs
-          ruleset/geoip-netflix.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/netflix.mrs
-          ruleset/geoip-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/cn.mrs
-          ruleset/category-ntp-cn.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-ntp%40cn.mrs
-          ruleset/category-ntp.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-ntp.mrs
-          ruleset/geosite-anthropic.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/anthropic.mrs
-          ruleset/AS399358.mrs|https://v4.gh-proxy.org/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/asn/AS399358.mrs
+          ruleset/category-porn.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-porn.mrs
+          ruleset/fakeip-filter.mrs|https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/fakeip-filter.mrs
+          ruleset/ads.mrs|https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/ads.mrs
+          ruleset/trackerslist.mrs|https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/trackerslist.mrs
+          ruleset/apple-cn.mrs|https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/apple-cn.mrs
+          ruleset/google-cn.mrs|https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/google-cn.mrs
+          ruleset/microsoft-cn.mrs|https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/microsoft-cn.mrs
+          ruleset/games-cn.mrs|https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/games-cn.mrs
+          ruleset/ai.mrs|https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/ai.mrs
+          ruleset/tld-proxy.mrs|https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/tld-proxy.mrs
+          ruleset/gfw.mrs|https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/gfw.mrs
+          ruleset/proxy.mrs|https://github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/proxy.mrs
+          ruleset/geosite-cn.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/cn.mrs
+          ruleset/geosite-private.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/private.mrs
+          ruleset/geosite-geolocation-not-cn.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/geolocation-%21cn.mrs
+          ruleset/geosite-category-ads-all.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-ads-all.mrs
+          ruleset/geosite-youtube.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/youtube.mrs
+          ruleset/geosite-steam-cn.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/steam%40cn.mrs
+          ruleset/geosite-icloud-cn.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/icloud%40cn.mrs
+          ruleset/geosite-telegram.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/telegram.mrs
+          ruleset/geosite-whatsapp.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/whatsapp.mrs
+          ruleset/geosite-twitter.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/twitter.mrs
+          ruleset/geosite-facebook.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/facebook.mrs
+          ruleset/geosite-tiktok.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/tiktok.mrs
+          ruleset/geosite-netflix.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/netflix.mrs
+          ruleset/geoip-private.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/private.mrs
+          ruleset/geoip-telegram.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/telegram.mrs
+          ruleset/geoip-twitter.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/twitter.mrs
+          ruleset/geoip-facebook.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/facebook.mrs
+          ruleset/geoip-netflix.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/netflix.mrs
+          ruleset/geoip-cn.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geoip/cn.mrs
+          ruleset/category-ntp-cn.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-ntp%40cn.mrs
+          ruleset/category-ntp.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-ntp.mrs
+          ruleset/geosite-anthropic.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/anthropic.mrs
+          ruleset/AS399358.mrs|https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/asn/AS399358.mrs
           ../geoip.metadb|https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb
           EOF
 
