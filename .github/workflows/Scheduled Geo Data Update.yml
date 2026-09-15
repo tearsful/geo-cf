@@ -438,6 +438,19 @@ jobs:
         with:
           tag_name: ${{ github.event_name }}-${{ steps.date.outputs.date }}
           name: ${{ steps.date.outputs.date }}
+          body: |
+            ## Geo / Ruleset 定时更新
+
+            本次构建产物：
+
+            | 文件 | 说明 |
+            |------|------|
+            | `geo.zip` | geoip / geosite / 广告域名 / CN IP / Cloudflare CIDR 等 |
+            | `ruleset.zip` | mihomo `ruleProviderEntries` 规则集与 `geoip.metadb` |
+            | `cn_ip_cidr.rsc` | MikroTik 导入脚本（不在 zip 内） |
+
+            - 触发方式：`${{ github.event_name }}`
+            - 提交：`${{ github.sha }}`
           draft: false
           prerelease: false
           files: |
